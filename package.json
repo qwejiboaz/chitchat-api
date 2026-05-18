@@ -2,6 +2,7 @@
   "name": "chitchat-api",
   "version": "1.0.0",
   "dependencies": {
-    "@azure/web-pubsub": "^1.0.0"
+    "@azure/web-pubsub": "^1.0.0",
+    "@azure/data-tables": "^13.0.0"
   }
 }
