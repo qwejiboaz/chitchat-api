@@ -12,7 +12,6 @@ module.exports = async function(context, req) {
 
   try {
     if (method === "GET" && action === "history") {
-      // Get game history - last 50 games
       const client = await getClient("games");
       const games = [];
       const iter = client.listEntities({
@@ -38,7 +37,6 @@ module.exports = async function(context, req) {
       };
 
     } else if (method === "GET" && action === "top10") {
-      // Get top 10 players
       const client = await getClient("players");
       const players = [];
       const iter = client.listEntities({
@@ -65,11 +63,9 @@ module.exports = async function(context, req) {
       };
 
     } else if (method === "POST" && action === "elimination") {
-      // Record a player elimination during the game
-      const { gameId, playerName, place, chipsLost, had31, round } = req.body;
+      const { gameId, playerName, chipsLost, had31, round, justThe31 } = req.body;
       const pClient = await getClient("players");
 
-      // Update or create player record
       let playerEntity;
       try {
         playerEntity = await pClient.getEntity("player", playerName);
@@ -83,14 +79,19 @@ module.exports = async function(context, req) {
         };
       }
 
-      playerEntity.losses = (playerEntity.losses || 0) + 1;
-      playerEntity.games = (playerEntity.games || 0) + 1;
-      playerEntity.chipsLost = (playerEntity.chipsLost || 0) + (chipsLost || 0);
-      if (had31) playerEntity.thirtyOnes = (playerEntity.thirtyOnes || 0) + 1;
-      playerEntity.currentStreak = 0; // reset streak on loss
+      if (justThe31) {
+        // Just record the 31 — don't touch wins/losses/games
+        playerEntity.thirtyOnes = (playerEntity.thirtyOnes || 0) + 1;
+      } else {
+        // Full elimination record
+        playerEntity.losses = (playerEntity.losses || 0) + 1;
+        playerEntity.games = (playerEntity.games || 0) + 1;
+        playerEntity.chipsLost = (playerEntity.chipsLost || 0) + (chipsLost || 0);
+        if (had31) playerEntity.thirtyOnes = (playerEntity.thirtyOnes || 0) + 1;
+        playerEntity.currentStreak = 0;
+      }
 
       await pClient.upsertEntity(playerEntity, "Replace");
-
       context.res = {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -98,7 +99,6 @@ module.exports = async function(context, req) {
       };
 
     } else if (method === "POST" && action === "game-start") {
-      // Create game record when game starts
       const { gameId, players, host, date } = req.body;
       const gClient = await getClient("games");
 
@@ -121,7 +121,6 @@ module.exports = async function(context, req) {
       };
 
     } else if (method === "POST" && action === "round-end") {
-      // Update round count and 31s after each round
       const { gameId, round, thirtyOneBy } = req.body;
       const gClient = await getClient("games");
 
@@ -149,12 +148,10 @@ module.exports = async function(context, req) {
       };
 
     } else if (method === "POST" && action === "game-end") {
-      // Finalize game — record winner, update standings, update player win record
       const { gameId, standings, round } = req.body;
       const gClient = await getClient("games");
       const pClient = await getClient("players");
 
-      // Update game record
       let game;
       try {
         game = await gClient.getEntity("game", gameId);
@@ -170,7 +167,6 @@ module.exports = async function(context, req) {
         complete: true
       }, "Replace");
 
-      // Update winner's player record
       if (standings.length > 0) {
         const winner = standings[0];
         let playerEntity;
@@ -187,8 +183,6 @@ module.exports = async function(context, req) {
         }
 
         playerEntity.wins = (playerEntity.wins || 0) + 1;
-        // Note: games count already incremented at elimination for losers
-        // Winner's games count needs incrementing here
         playerEntity.games = (playerEntity.games || 0) + 1;
         playerEntity.currentStreak = (playerEntity.currentStreak || 0) + 1;
         if (playerEntity.currentStreak > (playerEntity.bestStreak || 0)) {
